@@ -53,7 +53,6 @@ const IntelligentRanking = () => {
     const [exportLoading, setExportLoading] = useState(false);
     const [expandedAccordions, setExpandedAccordions] = useState({});
     const [onlyApplicants, setOnlyApplicants] = useState(false); // Default to showing all candidates
-<<<<<<< Updated upstream
     
     // Flagged candidates modal state
     const [flaggedModalOpen, setFlaggedModalOpen] = useState(false);
@@ -69,9 +68,6 @@ const IntelligentRanking = () => {
         // Otherwise, add https://
         return `https://${url}`;
     };
-=======
-    const [anonymizationEnabled, setAnonymizationEnabled] = useState(false); // Track anonymization status
->>>>>>> Stashed changes
 
     useEffect(() => {
         fetchInternships();
@@ -125,11 +121,9 @@ const IntelligentRanking = () => {
             console.log('📊 Rank candidates response:', response.data);
             console.log('👥 Total candidates:', response.data.total_candidates);
             console.log('🏆 Ranked candidates count:', response.data.ranked_candidates?.length);
-            console.log('🔒 Anonymization enabled:', response.data.anonymization_enabled);
 
             setRankedCandidates(response.data.ranked_candidates || []);
             setScoringInfo(response.data.scoring_info || null);
-            setAnonymizationEnabled(response.data.anonymization_enabled || false);
 
             // Reset accordion state - ALL COLLAPSED by default
             const initialState = {};
@@ -182,9 +176,7 @@ const IntelligentRanking = () => {
             toast.loading('Fetching resume...', { id: 'resume-fetch' });
 
             const token = localStorage.getItem('token');
-            
-            // First, get resume metadata
-            const metadataResponse = await axios.get(
+            const response = await axios.get(
                 `http://localhost:8000/api/recommendations/resume/${studentId}`,
                 {
                     headers: { Authorization: `Bearer ${token}` },
@@ -192,47 +184,37 @@ const IntelligentRanking = () => {
                 }
             );
 
-            const { resume_id, anonymized, storage_type, url } = metadataResponse.data;
-            const isAnonymized = anonymized === true;
-
-            // If it's S3 storage (old flow), use direct URL
-            if (storage_type === 's3') {
-                window.open(url, '_blank');
-                toast.dismiss('resume-fetch');
-                const displayName = anonymizationEnabled ? 'Anonymous Candidate' : studentName;
-                toast.success(`📄 Opening ${displayName}'s resume`, { duration: 3000 });
-                return;
-            }
-
-            // For API storage, download PDF with authentication and display as blob
-            toast.loading('Loading PDF...', { id: 'resume-fetch' });
-            
-            const pdfResponse = await axios.get(url, {
-                headers: { Authorization: `Bearer ${token}` },
-                responseType: 'blob' // Important: get binary data
-            });
-
-            // Create blob URL and open in new tab
-            const blob = new Blob([pdfResponse.data], { type: 'application/pdf' });
-            const blobUrl = window.URL.createObjectURL(blob);
-            window.open(blobUrl, '_blank');
-
-            // Clean up blob URL after a delay
-            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
-
             toast.dismiss('resume-fetch');
 
-            // Show appropriate message based on anonymization
-            const displayName = anonymizationEnabled ? 'Anonymous Candidate' : studentName;
-            if (isAnonymized) {
-                toast.success(`🔒 Opening anonymized resume`, {
-                    duration: 4000,
-                    description: 'Names, emails, and phone numbers have been redacted',
-                });
-            } else {
-                toast.success(`📄 Opening ${displayName}'s resume`, {
-                    duration: 3000,
-                });
+            // Determine resume type for user feedback
+            const resumeType = response.data.is_tailored ? '📝 tailored' : 'base';
+            const resumeIcon = response.data.is_tailored ? '📝' : '📄';
+
+            if (response.data.storage_type === 's3') {
+                // Open S3 presigned URL in new tab
+                window.open(response.data.url, '_blank');
+
+                // Show appropriate message based on resume type
+                if (response.data.is_tailored) {
+                    toast.success(`${resumeIcon} Opening ${studentName}'s tailored resume for this internship`, {
+                        duration: 4000,
+                    });
+                } else {
+                    // Check if message indicates this is a fallback
+                    if (response.data.message && response.data.message.includes('active base resume')) {
+                        toast.success(`${resumeIcon} Opening ${studentName}'s base resume`, {
+                            duration: 3000,
+                            icon: '📄',
+                        });
+                    } else {
+                        toast.success(`${resumeIcon} Opening ${studentName}'s resume`, {
+                            duration: 3000,
+                        });
+                    }
+                }
+            } else if (response.data.storage_type === 'local') {
+                // For local storage, we need a different endpoint to serve the file
+                toast('Resume stored locally. Please contact admin.', { icon: 'ℹ️' });
             }
         } catch (error) {
             toast.dismiss('resume-fetch');
@@ -531,21 +513,8 @@ const IntelligentRanking = () => {
                                         <Box sx={{ flex: 1 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                                                 <Typography variant="h6" fontWeight="bold">
-                                                    {anonymizationEnabled ? `Candidate #${index + 1}` : candidate.candidate_name}
+                                                    {candidate.candidate_name}
                                                 </Typography>
-                                                {anonymizationEnabled && (
-                                                    <Chip
-                                                        label="🔒 Anonymous"
-                                                        size="small"
-                                                        sx={{
-                                                            backgroundColor: '#ff9800',
-                                                            color: 'white',
-                                                            fontWeight: 'bold',
-                                                            fontSize: '0.75rem',
-                                                            height: 24,
-                                                        }}
-                                                    />
-                                                )}
                                                 {candidate.scoring_breakdown?.has_tailored && (
                                                     <Chip
                                                         label="✨ Tailored Resume"
